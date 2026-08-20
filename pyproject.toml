@@ -16,6 +16,10 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 horde = "horde.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["horde*"]
+exclude = ["instructions*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
