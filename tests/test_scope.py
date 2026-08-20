@@ -16,6 +16,15 @@ def test_ip_and_cidr():
     assert engine.check("2001:db8::1", [AuthorizedScope(kind=ScopeKind.IP, value="2001:db8::1")]).allowed
 
 
+def test_ipv6_url_is_normalized_with_brackets():
+    decision = ScopeEngine().check(
+        "https://[2001:db8::1]/health",
+        [AuthorizedScope(kind=ScopeKind.IP, value="2001:db8::1")],
+    )
+    assert decision.allowed
+    assert decision.normalized_target == "https://[2001:db8::1]/health"
+
+
 def test_url_subtree_boundary_and_inactive_scope():
     engine = ScopeEngine()
     scope = AuthorizedScope(kind=ScopeKind.URL_SUBTREE, value="https://example.com/api")

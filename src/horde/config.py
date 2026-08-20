@@ -2,9 +2,10 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -13,7 +14,10 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_service_role_key: SecretStr | None = None
     execute_tools: bool = Field(False, alias="HORDE_EXECUTE_TOOLS")
-    tool_allowlist: list[str] = Field(default_factory=lambda: ["dns", "http", "tls", "ports"], alias="HORDE_TOOL_ALLOWLIST")
+    tool_allowlist: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["dns", "http", "tls", "ports"],
+        alias="HORDE_TOOL_ALLOWLIST",
+    )
     tool_timeout_seconds: float = Field(30.0, alias="HORDE_TOOL_TIMEOUT_SECONDS", gt=0, le=3600)
     worker_interval_seconds: float = Field(5.0, alias="HORDE_WORKER_INTERVAL_SECONDS", gt=0)
     retire_health_below: int = Field(40, alias="HORDE_RETIRE_HEALTH_BELOW", ge=0, le=100)
