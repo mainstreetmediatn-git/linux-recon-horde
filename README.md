@@ -31,7 +31,10 @@ horde doctor
 horde tools list
 horde scope check https://api.example.com/v1 --kind domain --value example.com
 horde worker-once --target example.com --tool dns --project-id UUID
+horde worker-once --target example.com --tool dns --project-id UUID --backend supabase
 ```
+
+The `supabase` backend loads active scopes for the project before claiming the job. It requires the `horde` schema to be exposed to the Data API and the server-side service-role credentials in `.env`; `memory` remains the default local smoke-test backend.
 
 For Linux deployment, review `deploy/systemd/horde-worker@.service`; for containers, use the hardened `Dockerfile` and `docker-compose.yml`. `scripts/install-tools.sh` detects Debian-family systems and installs only optional packages that are absent.
 
