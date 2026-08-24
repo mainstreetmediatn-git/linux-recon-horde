@@ -4,103 +4,169 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Iterable
 
-from .models import Agent, MissionContract
+from .models import Agent, EnforcementMode, ExecutionRequest, MissionContract, OperatorPolicy, RiskLevel
 
 
 class Decision(str, Enum):
     ALLOW = "allow"
+    WARN = "warn"
     DENY = "deny"
-    REQUIRE_APPROVAL = "require_approval"
+    REQUIRE_ACKNOWLEDGEMENT = "require_acknowledgement"
 
 
 @dataclass(slots=True, frozen=True)
 class PolicyDecision:
     decision: Decision
     reason: str
-    required_approvals: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
     rule_ids: tuple[str, ...] = ()
+    override_applied: bool = False
 
 
 @dataclass(slots=True)
 class ConstitutionPolicy:
-    """Small, explicit policy engine for Horde constitutional invariants."""
+    """Policy evaluator driven by the operator's configured rules of engagement.
 
-    version: str = "1.0.0"
+    Horde itself supplies evaluation, warnings, and audit-friendly decisions.
+    The operator policy determines which conditions are advisory versus blocking.
+    """
+
+    version: str = "2.0.0"
     rules: dict[str, str] = field(
         default_factory=lambda: {
-            "HORD-LAW-001": "deny by default",
-            "HORD-LAW-002": "least scoped authority",
-            "HORD-LAW-003": "evidence over assertion",
-            "HORD-LAW-004": "human approval for high-impact lifecycle actions",
-            "HORD-LAW-005": "authorized targets only",
-            "HORD-LAW-006": "separation of powers",
-            "HORD-LAW-007": "append-only audit for important state changes",
+            "HORD-OP-001": "operator policy is authoritative for engagement controls",
+            "HORD-OP-002": "configured scope controls are evaluated explicitly",
+            "HORD-OP-003": "risk metadata is surfaced to the operator",
+            "HORD-OP-004": "operator overrides are explicit and auditable",
+            "HORD-OP-005": "important decisions preserve reasons and warnings",
         }
     )
 
+    @staticmethod
+    def _risk_rank(risk: RiskLevel) -> int:
+        return {
+            RiskLevel.LOW: 1,
+            RiskLevel.MEDIUM: 2,
+            RiskLevel.HIGH: 3,
+            RiskLevel.CRITICAL: 4,
+        }[risk]
+
+    @staticmethod
+    def _resolve_findings(policy: OperatorPolicy, findings: list[str], *, override: bool, override_reason: str | None) -> PolicyDecision:
+        if not findings:
+            return PolicyDecision(Decision.ALLOW, "request satisfies configured operator policy")
+
+        if override and policy.allow_operator_override:
+            reason = "operator override applied"
+            if override_reason:
+                reason += f": {override_reason}"
+            return PolicyDecision(
+                Decision.ALLOW,
+                reason,
+                warnings=tuple(findings),
+                rule_ids=("HORD-OP-004", "HORD-OP-005"),
+                override_applied=True,
+            )
+
+        if policy.enforcement_mode is EnforcementMode.ADVISORY:
+            return PolicyDecision(
+                Decision.WARN,
+                "configured policy findings are advisory",
+                warnings=tuple(findings),
+                rule_ids=("HORD-OP-002", "HORD-OP-003"),
+            )
+
+        if policy.enforcement_mode is EnforcementMode.ACKNOWLEDGE:
+            return PolicyDecision(
+                Decision.REQUIRE_ACKNOWLEDGEMENT,
+                "operator acknowledgement is required for configured policy findings",
+                warnings=tuple(findings),
+                rule_ids=("HORD-OP-002", "HORD-OP-003"),
+            )
+
+        return PolicyDecision(
+            Decision.DENY,
+            "request violates configured strict operator policy",
+            warnings=tuple(findings),
+            rule_ids=("HORD-OP-002",),
+        )
+
     def evaluate_mission(self, mission: MissionContract) -> PolicyDecision:
-        if not mission.authorized:
-            return PolicyDecision(
-                Decision.DENY,
-                "mission is not explicitly authorized",
-                rule_ids=("HORD-LAW-001", "HORD-LAW-005"),
-            )
-        if not mission.target_scope:
-            return PolicyDecision(
-                Decision.DENY,
-                "mission has no explicit target scope",
-                rule_ids=("HORD-LAW-002", "HORD-LAW-005"),
-            )
-        if not mission.required_evidence:
-            return PolicyDecision(
-                Decision.DENY,
-                "mission defines no evidence requirements",
-                rule_ids=("HORD-LAW-003",),
-            )
-        return PolicyDecision(Decision.ALLOW, "mission contract satisfies baseline policy")
+        policy = mission.operator_policy
+        findings: list[str] = []
+
+        if policy.require_explicit_authorization and not mission.authorized:
+            findings.append("mission is not explicitly marked authorized")
+        if policy.require_target_scope and not mission.target_scope:
+            findings.append("mission has no configured target scope")
+
+        return self._resolve_findings(policy, findings, override=False, override_reason=None)
+
+    def evaluate_request(self, mission: MissionContract, agent: Agent, request: ExecutionRequest) -> PolicyDecision:
+        policy = mission.operator_policy
+        findings: list[str] = []
+
+        if policy.require_explicit_authorization and not mission.authorized:
+            findings.append("mission is not explicitly marked authorized")
+        if policy.require_target_scope and request.target not in mission.target_scope:
+            findings.append("target is outside the mission target scope")
+        if policy.require_target_scope and agent.scopes and request.target not in agent.scopes:
+            findings.append("target is outside the agent scope")
+        if policy.require_tool_admission and request.tool not in mission.allowed_tools:
+            findings.append("tool is not admitted by the mission")
+        if policy.require_tool_admission and agent.allowed_tools and request.tool not in agent.allowed_tools:
+            findings.append("tool is not admitted for the selected agent")
+        if policy.require_module_admission and request.module_id not in mission.allowed_modules:
+            findings.append("module is not admitted by the mission")
+
+        risk_needs_ack = (
+            policy.require_risk_acknowledgement
+            and self._risk_rank(request.risk_level) >= self._risk_rank(policy.acknowledgement_at_or_above)
+        )
+        if risk_needs_ack and not request.risk_acknowledged:
+            findings.append(f"{request.risk_level.value} risk has not been acknowledged")
+
+        decision = self._resolve_findings(
+            policy,
+            findings,
+            override=request.operator_override,
+            override_reason=request.override_reason,
+        )
+
+        if decision.decision is Decision.REQUIRE_ACKNOWLEDGEMENT and request.risk_acknowledged:
+            non_risk_findings = [item for item in findings if "risk has not been acknowledged" not in item]
+            if not non_risk_findings:
+                return PolicyDecision(Decision.ALLOW, "configured acknowledgement requirement satisfied")
+
+        return decision
 
     def evaluate_agent_tool_use(self, agent: Agent, *, tool: str, target: str) -> PolicyDecision:
-        if target not in agent.scopes:
-            return PolicyDecision(
-                Decision.DENY,
-                "target is outside the agent's explicit scope",
-                rule_ids=("HORD-LAW-002", "HORD-LAW-005"),
-            )
-        if tool not in agent.allowed_tools:
-            return PolicyDecision(
-                Decision.DENY,
-                "tool is not admitted for this agent",
-                rule_ids=("HORD-LAW-001", "HORD-LAW-002"),
-            )
-        return PolicyDecision(Decision.ALLOW, "tool and target are within admitted scope")
+        """Compatibility helper. No independent hidden rules are imposed here."""
+        findings: list[str] = []
+        if agent.scopes and target not in agent.scopes:
+            findings.append("target is outside the agent's declared scope")
+        if agent.allowed_tools and tool not in agent.allowed_tools:
+            findings.append("tool is outside the agent's declared tool set")
+        if findings:
+            return PolicyDecision(Decision.WARN, "agent metadata mismatch", warnings=tuple(findings))
+        return PolicyDecision(Decision.ALLOW, "agent metadata matches request")
 
     def evaluate_lifecycle_action(self, action: str, approvals: Iterable[str]) -> PolicyDecision:
-        high_impact = {"admit", "activate", "promote_successor", "suspend", "retire", "remove"}
-        if action not in high_impact:
-            return PolicyDecision(Decision.ALLOW, "action is not classified as high-impact")
-
-        given = set(approvals)
-        required = {"human"}
-        if action in {"activate", "promote_successor", "retire"}:
-            required |= {"judge", "auditor"}
-        missing = required - given
-        if missing:
-            return PolicyDecision(
-                Decision.REQUIRE_APPROVAL,
-                f"missing approvals: {', '.join(sorted(missing))}",
-                required_approvals=tuple(sorted(required)),
-                rule_ids=("HORD-LAW-004",),
-            )
-        return PolicyDecision(Decision.ALLOW, "required approvals are present")
+        """Lifecycle approvals remain metadata-driven; no mandatory approval set is hardcoded."""
+        given = tuple(sorted(set(approvals)))
+        return PolicyDecision(
+            Decision.ALLOW,
+            f"lifecycle action '{action}' recorded with approvals: {', '.join(given) if given else 'none'}",
+        )
 
     def validate_role_separation(self, role_capabilities: dict[str, set[str]]) -> PolicyDecision:
+        """Role separation is now advisory information for the operator."""
+        warnings: list[str] = []
         exclusive = {"plan", "execute", "judge", "memory_govern", "tool_admit", "audit"}
         for role, capabilities in role_capabilities.items():
             owned = exclusive.intersection(capabilities)
             if len(owned) > 2:
-                return PolicyDecision(
-                    Decision.DENY,
-                    f"role {role} owns too many constitutional powers: {', '.join(sorted(owned))}",
-                    rule_ids=("HORD-LAW-006",),
-                )
-        return PolicyDecision(Decision.ALLOW, "role capabilities preserve separation of powers")
+                warnings.append(f"role {role} owns multiple powers: {', '.join(sorted(owned))}")
+        if warnings:
+            return PolicyDecision(Decision.WARN, "role concentration detected", warnings=tuple(warnings))
+        return PolicyDecision(Decision.ALLOW, "role capability distribution recorded")
