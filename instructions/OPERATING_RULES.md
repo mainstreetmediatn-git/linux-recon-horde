@@ -39,28 +39,38 @@ Do not assume `main` contains the active implementation until the relevant pull 
 - Use `OPENAI_API_KEY` as the expected OpenAI secret name unless the operator changes it.
 - Never place secret values in instructions, issues, PR descriptions, logs, evidence, or reports.
 
-## Safety and authorization
+## Operator-defined engagement policy
 
-- Recon targets must be owned or explicitly authorized.
-- Deny by default when authorization is absent or ambiguous.
-- Keep mission and agent scopes explicit.
-- Tool use must be admitted and scoped.
-- Preserve audit records and evidence provenance.
-- Do not add credential theft, uncontrolled brute force, malware, persistence, destructive actions, anti-forensics, log wiping, or unsafe external targeting.
+Horde does not maintain a second hidden rules-of-engagement layer that silently overrides the operator's configuration.
+
+The operator controls engagement behavior through `OperatorPolicy`, including:
+
+- enforcement mode: `advisory`, `acknowledge`, or `strict`
+- whether explicit mission authorization is required
+- whether target scope is enforced
+- whether tool admission is enforced
+- whether module admission is enforced
+- whether risk acknowledgement is required
+- the risk threshold at which acknowledgement begins
+- whether operator override is permitted
+
+Risk levels, target scope, tool lists, module lists, and role concentration remain visible as metadata even when they are not configured as blocking controls.
+
+### Enforcement semantics
+
+- `advisory` — policy findings are surfaced and recorded but do not block a runnable job.
+- `acknowledge` — configured findings pause the job until operator acknowledgement.
+- `strict` — configured findings block the job unless an enabled operator override is applied.
+
+Operator override is a first-class state. When enabled, Horde records the fact that an override occurred, preserves the underlying warnings, and stores the operator-provided reason rather than pretending the original policy finding never happened.
+
+Structural integrity checks, such as mismatched mission or agent identity, remain errors because they indicate internally inconsistent data rather than a rules-of-engagement choice.
 
 ## Human authority
 
-High-impact actions require human control, including:
+The operator is the authority over configured engagement controls. Judge, Auditor, agent, and policy services provide evaluation, evidence, warnings, and history; they do not silently replace operator policy with a separate hidden ruleset.
 
-- agent admission
-- successor promotion
-- retirement
-- suspension/removal
-- constitutional amendments
-- high-impact tool admission
-- broad scope expansion
-
-Judge and Auditor review should supplement, not replace, human sovereignty.
+Lifecycle approvals and role-separation checks are recorded as metadata and may be promoted into enforcement by future operator policy settings rather than being unconditionally hardcoded.
 
 ## Engineering rules
 
@@ -70,25 +80,12 @@ Judge and Auditor review should supplement, not replace, human sovereignty.
 - Do not claim functionality is live until verified.
 - Distinguish demo/sample data from persisted/live data.
 - Preserve backward compatibility unless intentionally versioning a contract.
-- Keep evidence and lifecycle transitions reproducible and auditable.
+- Keep policy decisions, overrides, evidence, and lifecycle transitions reproducible and auditable.
+- Do not hide policy warnings merely because the operator chose advisory mode or applied an override.
 
 ## Agent lifecycle rule
 
-Never retire an agent in a way that creates an avoidable capability gap.
-
-Normal succession requires:
-
-1. successor candidate creation
-2. probation/shadow training
-3. approved memory transfer
-4. readiness evaluation
-5. Judge/Auditor review
-6. human approval
-7. overlap/handoff window
-8. predecessor retirement
-9. archived lineage record
-
-If the successor fails readiness, pause retirement.
+Agent lifecycle behavior should be configurable rather than treated as an independent engagement gate. Lifecycle transitions should preserve lineage and history so the operator can understand what changed and why.
 
 ## External references
 
