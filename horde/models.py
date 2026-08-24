@@ -29,6 +29,40 @@ class MemoryState(str, Enum):
     RATIFIED = "ratified"
 
 
+class EnforcementMode(str, Enum):
+    """How strongly Horde enforces the operator's own engagement policy."""
+
+    ADVISORY = "advisory"
+    ACKNOWLEDGE = "acknowledge"
+    STRICT = "strict"
+
+
+class RiskLevel(str, Enum):
+    LOW = "Low"
+    MEDIUM = "Medium"
+    HIGH = "High"
+    CRITICAL = "Critical"
+
+
+@dataclass(slots=True)
+class OperatorPolicy:
+    """Operator-owned rules of engagement.
+
+    Horde reports metadata and applies only the controls configured here.
+    It does not silently substitute a separate ruleset.
+    """
+
+    enforcement_mode: EnforcementMode = EnforcementMode.ADVISORY
+    require_explicit_authorization: bool = False
+    require_target_scope: bool = False
+    require_tool_admission: bool = False
+    require_module_admission: bool = False
+    require_risk_acknowledgement: bool = False
+    acknowledgement_at_or_above: RiskLevel = RiskLevel.HIGH
+    allow_operator_override: bool = True
+    audit_overrides: bool = True
+
+
 @dataclass(slots=True)
 class Evidence:
     evidence_id: str
@@ -92,3 +126,22 @@ class MissionContract:
     approval_gates: list[str]
     report_requirements: list[str]
     authorized: bool = False
+    allowed_modules: list[str] = field(default_factory=list)
+    operator_policy: OperatorPolicy = field(default_factory=OperatorPolicy)
+
+
+@dataclass(slots=True)
+class ExecutionRequest:
+    """One operator-requested execution plan before any adapter runs."""
+
+    request_id: str
+    mission_id: str
+    agent_id: str
+    target: str
+    module_id: str
+    tool: str
+    risk_level: RiskLevel = RiskLevel.LOW
+    risk_acknowledged: bool = False
+    operator_override: bool = False
+    override_reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
