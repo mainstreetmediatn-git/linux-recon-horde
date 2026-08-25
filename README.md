@@ -1,60 +1,39 @@
 # Linux Recon Horde
 
-**Linux Recon Horde** is a specialist reconnaissance and judging framework for **owned systems, approved labs, and explicitly authorized security assessments**.
+> A hardened, local-first, dual-mode reconnaissance orchestration engine built for Python 3.11+.
 
-Rather than treating reconnaissance as one monolithic scan, Horde is designed as a panel: specialist agents collect and interpret evidence, judges compare findings and contradictions, memory preserves prior context, and the human operator remains the final authority.
+**Linux Recon Horde** bridges the gap between autonomous AI agent tooling and rigorous human-in-the-loop operational security. It provides a structured, race-condition-free execution environment for running recon modules with strict target validation, process-group isolation, durable persistence, and an integrated Model Context Protocol (MCP) gateway.
 
-## Core idea
+---
 
-Horde separates work into distinct capability families:
+## 🌟 Core Architecture & Features
 
-- **Core** — orchestration, scope, policy, job lifecycle, audit trail
-- **Agents** — specialist recon workers
-- **Judges** — compare evidence, confidence, conflicts, and conclusions
-- **Skills** — reusable analysis capabilities
-- **Tools** — controlled integrations with approved Linux utilities
-- **Memory** — prior findings and related context
-- **Evidence** — source, timestamp, command/tool provenance, raw and normalized observations
-- **Reports** — operator-readable findings and exports
-- **Config** — safe defaults, target scope, rate/load controls, feature gates
+- **Dual-Mode Orchestration Architecture**: Seamlessly switches between automated background execution via a bounded thread pool and safe manual fallback runbooks—both bound to the exact same validation and policy pipeline.
+- **Defensive Concurrency & Lifecycle Safety**: Features atomic create-vs-shutdown boundaries, reversed completion-callback registration to eliminate retention leaks, and graceful shutdown normalization of queued/running tasks.
+- **Process Isolation & Supervision**: Spawns jobs in isolated process sessions (`start_new_session=True`) with multi-stage teardown escalation (`SIGTERM` → graceful grace period → `SIGKILL`), preventing orphan processes and zombies.
+- **Robust Target Validation**: Strict validation schemas parsing IP addresses (IPv4/IPv6), CIDR blocks, hostnames, domains, and URLs to block malformed inputs.
+- **Shell-Injection Defense**: Strictly avoids `shell=True`. Automated commands execute via structured `argv` arrays, and manual runbooks are safely rendered via `shlex.join`.
+- **Durable Disk Audit Trails**: Every job receives an isolated, timestamped log directory containing atomic `job.json` states alongside dedicated `stdout.log` and `stderr.log` streams.
+- **Model Context Protocol (MCP) Integration**: Built-in MCP gateway allows compatible AI clients to safely interact with the Horde while programmatically restricting high-risk modules and preserving human approval boundaries.
 
-Recovered project references also identify planned entry points such as `horde_cli.py`, `horde_scanner.py`, and `phased_scanner.py`.
+---
 
-## Recovered specialist capabilities
+## 🚀 Getting Started
 
-The original design references specialist coverage for:
+### Prerequisites
 
-- TCP and UDP service discovery
-- Version detection
-- Controlled script execution
-- HTTP title checks
-- Web fingerprinting
-- DNS lookup
-- TLS inspection
-- Subdomain lookup
-- Judge-based review of findings
+- Python 3.11 or higher
 
-## Safety model
+### Installation
 
-Horde is intentionally scoped for defensive and authorized use.
+Clone the repository and install the package in editable mode with development dependencies:
 
-- Require explicit authorization and target scope.
-- Default to passive or low-impact reconnaissance where possible.
-- Reduce UDP load and avoid unnecessary high-noise probing.
-- Disable OS fingerprinting when it is not appropriate for the engagement.
-- Preserve evidence and reports for operator review.
-- Do not perform credential attacks, exploitation, persistence, destructive actions, or unsafe external targeting.
+```bash
+git clone https://github.com/mainstreetmediatn-git/linux-recon-horde.git
+cd linux-recon-horde
 
-## Operator relationship
-
-Horde is a **specialist secondary-opinion and judge layer**. It is separate from SentinalOS and any other primary operator/runtime. The human operator remains the final authority over scope, execution, interpretation, and action.
-
-## Lab stack
-
-The recovered project notes reference a Linux security lab built around Kali, Nmap, Tshark, Nginx, Express, curl, OpenSSL, dig, and Python virtual environments.
-
-## Project status
-
-The GitHub repository was recovered as an almost-empty shell. Architecture and capability notes are being reconstructed from the project vault before implementation begins.
-
-See `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` for the recovered design and build sequence.
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e '.[dev]'
+```
