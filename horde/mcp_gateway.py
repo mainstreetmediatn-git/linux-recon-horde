@@ -127,7 +127,7 @@ async def horde_read_stderr(job_id: str) -> str:
     return await _request("GET", f"/api/jobs/{job_id}/stderr")
 
 
-if __name__ == "__main__":
+def main() -> None:
     transport = os.getenv("HORDE_MCP_TRANSPORT", "stdio")
     if transport == "stdio":
         mcp.run(transport="stdio")
@@ -141,3 +141,7 @@ if __name__ == "__main__":
         raise SystemExit(
             "HORDE_MCP_TRANSPORT must be 'stdio' or 'streamable-http'."
         )
+
+
+if __name__ == "__main__":
+    main()
