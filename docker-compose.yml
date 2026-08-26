@@ -1,0 +1,38 @@
+services:
+  horde:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: "2.6.0"
+    image: linux-recon-horde:2.6.0
+    container_name: linux-recon-horde
+    restart: unless-stopped
+    init: true
+    environment:
+      HORDE_HOST: 0.0.0.0
+      HORDE_PORT: 8787
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./logs:/app/logs
+      - ./modules:/app/modules:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8787/api/health', timeout=3)); raise SystemExit(0 if d.get('status') == 'online' else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
